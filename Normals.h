@@ -43,8 +43,8 @@
 #include <math.h>
 #include <string>
 #include <sstream>
-#include "Eigen/Dense"
-#include "nanoflann.hpp"
+#include <Eigen/Dense>
+#include <nanoflann.hpp>
 
 #include <omp.h>
 
@@ -62,10 +62,10 @@ private:
 	int n_planes; /*!< Plane number to draw*/
 	int n_phi;/*!< Accumulator discretization parameter*/
 	int n_rot;/*!< Rotation number*/
-	int neighborhood_size; /*size of the neighborhood*/
+	size_t neighborhood_size; /*size of the neighborhood*/
 	bool use_density; /*!< use a density estimation of triplets generation*/
 	double tol_angle_rad;/*!< Angle parameter for cluster normal selection*/
-	unsigned int k_density; /*!< size of the neighborhood for density estimation*/
+	size_t k_density; /*!< size of the neighborhood for density estimation*/
 
 
 public:
@@ -74,22 +74,22 @@ public:
 	const Eigen::MatrixX3d& get_points()const {return pts;}
 
 	Eigen::MatrixX3d& get_normals(){return nls;}
-	int& get_T(){return n_planes;}
-	int& get_n_phi(){return n_phi;}
-	int& get_n_rot(){return n_rot;}
-	int& get_K(){return neighborhood_size;}
-	bool& density_sensitive(){return use_density;}
-	double& get_tol_angle_rad(){return tol_angle_rad;}
-	unsigned int& get_K_density(){return k_density;}
+	int& get_T() { return n_planes; }
+	int& get_n_phi() { return n_phi; }
+	int& get_n_rot() { return n_rot; }
+	size_t& get_K() { return neighborhood_size; }
+	bool& density_sensitive() { return use_density; }
+	double& get_tol_angle_rad() { return tol_angle_rad; }
+	size_t& get_K_density() { return k_density; }
 
 	const Eigen::MatrixX3d& get_normals()const {return nls;}
 	const int& get_T() const {return n_planes;}
 	const int& get_n_phi() const {return n_phi;}
 	const int& get_n_rot() const {return n_rot;}
-	const int& get_K() const {return neighborhood_size;}
+	const size_t& get_K() const { return neighborhood_size; }
 	const bool& density_sensitive() const {return use_density;}
 	const double& get_tol_angle_rad() const {return tol_angle_rad;}
-	const unsigned int& get_K_density() const {return k_density;}
+	const size_t& get_K_density() const { return k_density; }
 
 	////  TYPE DEFINITIONS  ////
 
@@ -116,30 +116,32 @@ public:
 		 ********************************/
 
 		//initialize the random number generator
-		srand((unsigned int)time(NULL));
+		srand(static_cast<unsigned int>(time(NULL)));
 
 		//creating vector of random int
-		std::vector<int> vecInt(1000000);
-		for(int i=0; i<vecInt.size(); i++){
-			vecInt[i] = rand();
+		std::vector<size_t> vecInt(1000000);
+		for (size_t i = 0; i < vecInt.size(); i++)
+		{
+			vecInt[i] = static_cast<size_t>(rand());
 		}
 
 		//confidence intervals (2 intervals length)
 		std::vector<float> conf_interv(n_planes);
-		for(int i=0; i<n_planes; i++){
-			conf_interv[i] = 2.f/std::sqrt(i+1.f);
+		for (int i = 0; i < n_planes; i++)
+		{
+			conf_interv[i] = 2.f / std::sqrt(i + 1.f);
 		}
 
 		//random permutation of the points (avoid thread difficult block)
 		std::vector<int> permutation(pts.rows());
-		for(int i=0; i<pts.rows(); i++){
+		for (int i = 0; i < pts.rows(); i++)
+		{
 			permutation[i] = i;
 		}
-		for(int i=0; i<pts.rows(); i++){
-			int j = rand()%pts.rows();
-			int temp = permutation[i];
-			permutation[i] = permutation[j];
-			permutation[j] = temp;
+		for (int i = 0; i < pts.rows(); i++)
+		{
+			int j = rand() % pts.rows();
+			std::swap(permutation[i], permutation[j]);
 		}
 
 		//creation of the rotation matrices and their inverses
@@ -157,7 +159,7 @@ public:
 		 ******************************/
 
 		//resizing the normal point cloud
-		nls.resize(pts.rows(),3);
+		nls.resize(pts.rows(), 3);
 
 		//kd tree creation
 		//build de kd_tree
@@ -166,23 +168,25 @@ public:
 
 		//create the density estimation for each point
 		densities.resize(pts.rows());
-		#if defined(USE_OPENMP_FOR_NORMEST)
-		#pragma omp parallel for schedule(guided)
-		#endif
-		for(int per=0; per<(int)pts.rows(); per++){
+#if defined(USE_OPENMP_FOR_NORMEST)
+#pragma omp parallel for schedule(guided)
+#endif
+		for (int per = 0; per < pts.rows(); per++)
+		{
 			//index of the point
 			int n = permutation[per];
 			//getting the list of neighbors
 			const Eigen::Vector3d& pt_query = pts.row(n);
-			std::vector<long int> pointIdxSearch(k_density+1);
-			std::vector<double> pointSquaredDistance(k_density+1);
+			std::vector<Eigen::MatrixX3d::Index> pointIdxSearch(k_density + 1);
+			std::vector<double> pointSquaredDistance(k_density + 1);
 			//knn for k_density+1 because the point is itself include in the search tree
-			tree.index->knnSearch(&pt_query[0], k_density+1, &pointIdxSearch[0], &pointSquaredDistance[0]);
-			double d =0;
-			for(int i=0; i<pointSquaredDistance.size(); i++){
-				d+=std::sqrt(pointSquaredDistance[i]);
+			tree.index->knnSearch(&pt_query[0], k_density + 1, &pointIdxSearch[0], &pointSquaredDistance[0]);
+			double d = 0;
+			for (size_t i = 0; i < pointSquaredDistance.size(); i++)
+			{
+				d += std::sqrt(pointSquaredDistance[i]);
 			}
-			d /= pointSquaredDistance.size()-1;
+			d /= pointSquaredDistance.size() - 1;
 			densities[n] = d;
 		}
 
@@ -192,55 +196,59 @@ public:
 		//create the list of triplets in KNN case
 		Eigen::MatrixX3i trip;
 		if(!use_density)
-			list_of_triplets(trip, int(neighborhood_size),rotations*n_planes,vecInt);
+			list_of_triplets(trip, neighborhood_size, rotations*n_planes, vecInt);
 
 
-		#if defined(USE_OPENMP_FOR_NORMEST)
-		#pragma omp parallel for schedule(guided)
-		#endif
-		for(int per=0; per<(int)pts.rows(); per++){
-
+#if defined(USE_OPENMP_FOR_NORMEST)
+#pragma omp parallel for schedule(guided)
+#endif
+		for (int per = 0; per < pts.rows(); per++)
+		{
 			//index of the point
 			int n = permutation[per];
 
 			//getting the list of neighbors
-			std::vector<long int> pointIdxSearch;
+			std::vector<Eigen::MatrixX3d::Index> pointIdxSearch;
 			std::vector<double> pointSquaredDistance;
 
 			const Eigen::Vector3d& pt_query = pts.row(n);
-			pointIdxSearch.resize(int(neighborhood_size));
-			pointSquaredDistance.resize(int(neighborhood_size));
-			tree.index->knnSearch(&pt_query[0], int(neighborhood_size), &pointIdxSearch[0], &pointSquaredDistance[0]);
+			pointIdxSearch.resize(neighborhood_size);
+			pointSquaredDistance.resize(neighborhood_size);
+			tree.index->knnSearch(&pt_query[0], neighborhood_size, &pointIdxSearch[0], &pointSquaredDistance[0]);
 
-			if(use_density)
-				list_of_triplets(trip,rotations*n_planes,pointIdxSearch,vecInt);
+			if (use_density)
+				list_of_triplets(trip, rotations*n_planes, pointIdxSearch, vecInt);
 
 			//get the points
-			unsigned int points_size = (unsigned int) pointIdxSearch.size();
-			Eigen::MatrixX3d points(points_size,3);
-			for(unsigned int pt=0; pt<pointIdxSearch.size(); pt++){
+			size_t points_size = pointIdxSearch.size();
+			Eigen::MatrixX3d points(points_size, 3);
+			for (size_t pt = 0; pt<pointIdxSearch.size(); pt++)
+			{
 				points.row(pt) = pts.row(pointIdxSearch[pt]);
 			}
 
 			std::vector<Eigen::Vector3d> normals_vec(rotations);
 			std::vector<float> normals_conf(rotations);
 
-			for(int i=0; i<rotations; i++){
-				Eigen::MatrixX3i triplets = trip.block(i*n_planes,0, n_planes, 3);
+			for (int i = 0; i < rotations; i++)
+			{
+				Eigen::MatrixX3i triplets = trip.block(i*n_planes, 0, n_planes, 3);
 
-				for(unsigned int pt= 0; pt < points_size; pt++){
-					points.row(pt) = rotMat[(n+i)%rotMat.size()]*points.row(pt).transpose();
+				for (size_t pt = 0; pt < points_size; pt++)
+				{
+					points.row(pt) = rotMat[(n + i) % rotMat.size()] * points.row(pt).transpose();
 				}
-				normals_conf[i] = normal_at_point(d1, d2,points,points_size,  n,  triplets,  conf_interv);
+				normals_conf[i] = normal_at_point(d1, d2, points, n, triplets, conf_interv);
 
-				for(unsigned int pt= 0; pt < points_size; pt++){
-					points.row(pt)=pts.row(pointIdxSearch[pt]);
+				for (size_t pt = 0; pt < points_size; pt++)
+				{
+					points.row(pt) = pts.row(pointIdxSearch[pt]);
 				}
-				normals_vec[i] = rotMatInv[(n+i)%rotMat.size()]*nls.row(n).transpose();
+				normals_vec[i] = rotMatInv[(n + i) % rotMat.size()] * nls.row(n).transpose();
 
 			}
 
-			nls.row(n)= normal_selection(rotations, normals_vec, normals_conf);
+			nls.row(n) = normal_selection(rotations, normals_vec, normals_conf);
 
 		}
 
@@ -261,28 +269,32 @@ private:
 		rotMat.clear();
 		rotMatInv.clear();
 
-		if(rotations==0){
+		if (rotations == 0)
+		{
 			Eigen::Matrix3d rMat;
-			rMat << 1,0,0,0,1,0,0,0,1;
+			rMat << 1, 0, 0, 0, 1, 0, 0, 0, 1;
 			rotMat.push_back(rMat);
 			rotMatInv.push_back(rMat);
-		}else{
-			for(int i=0; i<rotations; i++){
-				float theta = (rand()+0.f)/RAND_MAX * 2* 3.14159265f;
-				float phi = (rand()+0.f)/RAND_MAX * 2* 3.14159265f;
-				float psi = (rand()+0.f)/RAND_MAX * 2* 3.14159265f;
+		}
+		else
+		{
+			for (int i = 0; i < rotations; i++)
+			{
+				double theta = static_cast<double>(rand()) / RAND_MAX * 2 * M_PI;
+				double phi =   static_cast<double>(rand()) / RAND_MAX * 2 * M_PI;
+				double psi =   static_cast<double>(rand()) / RAND_MAX * 2 * M_PI;
 				Eigen::Matrix3d Rt;
 				Eigen::Matrix3d Rph;
 				Eigen::Matrix3d Rps;
-				Rt <<  1, 0, 0,0, cos(theta), -sin(theta),	0, sin(theta), cos(theta);
-				Rph << cos(phi),0, sin(phi),0,1,0,-sin(phi),0, cos(phi);
-				Rps << cos(psi), -sin(psi), 0,	sin(psi), cos(psi),0,0,0,1;
+				Rt << 1, 0, 0, 0, cos(theta), -sin(theta), 0, sin(theta), cos(theta);
+				Rph << cos(phi), 0, sin(phi), 0, 1, 0, -sin(phi), 0, cos(phi);
+				Rps << cos(psi), -sin(psi), 0, sin(psi), cos(psi), 0, 0, 0, 1;
 				Eigen::Matrix3d Rtinv;
 				Eigen::Matrix3d Rphinv;
 				Eigen::Matrix3d Rpsinv;
-				Rtinv <<  1, 0, 0,0, cos(theta) , sin(theta),0, -sin(theta), cos(theta);
-				Rphinv << cos(phi) , 0, -sin(phi),0, 1, 0,sin(phi), 0, cos(phi);
-				Rpsinv << cos(psi) , sin(psi), 0,	-sin(psi), cos(psi), 0,	0, 0, 1;
+				Rtinv << 1, 0, 0, 0, cos(theta), sin(theta), 0, -sin(theta), cos(theta);
+				Rphinv << cos(phi), 0, -sin(phi), 0, 1, 0, sin(phi), 0, cos(phi);
+				Rpsinv << cos(psi), sin(psi), 0, -sin(psi), cos(psi), 0, 0, 0, 1;
 
 				Eigen::Matrix3d rMat = Rt*Rph*Rps;
 				Eigen::Matrix3d rMatInv = Rpsinv*Rphinv*Rtinv;
@@ -301,20 +313,23 @@ private:
 	 * @param vecRandInt : table of random int
 	 */
 	inline void list_of_triplets(Eigen::MatrixX3i &triplets,
-			const int &number_of_points,
-			const unsigned int &triplet_number,
-			std::vector<int> &vecRandInt){
-
-		unsigned int S = vecRandInt.size();
-		triplets.resize(triplet_number,3);
-		unsigned int pos=vecRandInt[0]%S;
-		for(unsigned int i=0; i<triplet_number; i++){
-			do{
-				triplets(i,0) = vecRandInt[pos%S]%number_of_points;
-				triplets(i,1) = vecRandInt[(pos+vecRandInt[(pos+1)%S])%S]%number_of_points;
-				triplets(i,2) = vecRandInt[(pos+vecRandInt[(pos+1+vecRandInt[(pos+2)%S])%S])%S]%number_of_points;
-				pos+=vecRandInt[(pos+3)%S]%S;
-			}while(triplets(i,0)==triplets(i,1) || triplets(i,1)==triplets(i,2) || triplets(i,2)==triplets(i,0));
+			size_t number_of_points,
+			size_t triplet_number,
+			const std::vector<size_t> &vecRandInt)
+	{
+		size_t S = vecRandInt.size();
+		triplets.resize(triplet_number, 3);
+		size_t pos = vecRandInt[0] % S;
+		for (size_t i = 0; i < triplet_number; i++)
+		{
+			do
+			{
+				triplets(i, 0) = static_cast<int>(vecRandInt[pos % S] % number_of_points);
+				triplets(i, 1) = static_cast<int>(vecRandInt[(pos + vecRandInt[(pos + 1) % S]) % S] % number_of_points);
+				triplets(i, 2) = static_cast<int>(vecRandInt[(pos + vecRandInt[(pos + 1 + vecRandInt[(pos + 2) % S]) % S]) % S] % number_of_points);
+				pos += vecRandInt[(pos + 3) % S] % S;
+			}
+			while (triplets(i, 0) == triplets(i, 1) || triplets(i, 1) == triplets(i, 2) || triplets(i, 2) == triplets(i, 0));
 		}
 	}
 
@@ -325,17 +340,17 @@ private:
 	 * @return the index of the nearest neighbor of d in elems
 	 */
 	//return the index of the nearest element in the vector
-	unsigned int dichotomic_search_nearest(const std::vector<double> elems, double d){
-		unsigned int i1 = 0;
-		unsigned int i2 = elems.size()-1;
-		unsigned int i3;
+	int dichotomic_search_nearest(const std::vector<double> elems, double d){
+		size_t i1 = 0;
+		size_t i2 = elems.size() - 1;
+		size_t i3;
 		while(i2 > i1){
 			i3 = (i1+i2)/2;
 			if(elems[i3] == d){break;}
 			if(d < elems[i3]){i2 = i3;}
 			if(d > elems[i3]){i1 = i3;}
 		}
-		return i3;
+		return static_cast<int>(i3);
 	}
 
 	/*!
@@ -346,31 +361,35 @@ private:
 	 * @param vecRandInt : table of random int
 	 */
 	inline void list_of_triplets(Eigen::MatrixX3i &triplets,
-		const unsigned int &triplet_number,
-		std::vector<long int> pointIdxSearch,
-		std::vector<int> &vecRandInt)
+		size_t triplet_number,
+		const std::vector<Eigen::MatrixX3d::Index>& pointIdxSearch,
+		const std::vector<size_t> &vecRandInt)
 	{
 		std::vector<double> dists;
-		double sum=0;
-		for(int i=0; i<pointIdxSearch.size(); i++){
-			sum+=densities[pointIdxSearch[i]];
+		double sum = 0;
+		for (size_t i = 0; i < pointIdxSearch.size(); i++)
+		{
+			sum += densities[pointIdxSearch[i]];
 			dists.push_back(sum);
 		}
 
-		unsigned int S = vecRandInt.size();
-		unsigned int number_of_points = pointIdxSearch.size();
-		triplets.resize(triplet_number,3);
-		unsigned int pos=vecRandInt[0]%S;;
-		for(unsigned int i=0; i<triplet_number; i++){
-			do{
-				double d = (vecRandInt[pos%S]+0.)/RAND_MAX *sum;
-				triplets(i,0) = dichotomic_search_nearest(dists,d);
-				d = (vecRandInt[(pos+vecRandInt[(pos+1)%S])%S]+0.)/RAND_MAX;
-				triplets(i,1) = dichotomic_search_nearest(dists,d);
-				d = (vecRandInt[(pos+vecRandInt[(pos+1+vecRandInt[(pos+2)%S])%S])%S]+0.)/RAND_MAX;
-				triplets(i,2) = dichotomic_search_nearest(dists,d);
-				pos+=vecRandInt[(pos+3)%S]%S;
-			}while(triplets(i,0)==triplets(i,1) || triplets(i,1)==triplets(i,2) || triplets(i,2)==triplets(i,0));
+		size_t S = vecRandInt.size();
+		size_t number_of_points = pointIdxSearch.size();
+		triplets.resize(triplet_number, 3);
+		size_t pos = vecRandInt[0] % S;;
+		for (size_t i = 0; i < triplet_number; i++)
+		{
+			do
+			{
+				double d = (vecRandInt[pos % S] + 0.) / RAND_MAX *sum;
+				triplets(i, 0) = dichotomic_search_nearest(dists, d);
+				d = (vecRandInt[(pos + vecRandInt[(pos + 1) % S]) % S] + 0.) / RAND_MAX;
+				triplets(i, 1) = dichotomic_search_nearest(dists, d);
+				d = (vecRandInt[(pos + vecRandInt[(pos + 1 + vecRandInt[(pos + 2) % S]) % S]) % S] + 0.) / RAND_MAX;
+				triplets(i, 2) = dichotomic_search_nearest(dists, d);
+				pos += vecRandInt[(pos + 3) % S] % S;
+			}
+			while (triplets(i, 0) == triplets(i, 1) || triplets(i, 1) == triplets(i, 2) || triplets(i, 2) == triplets(i, 0));
 		}
 	}
 
@@ -386,13 +405,13 @@ private:
 	 */
 	float normal_at_point(
 			const int d1, const int d2,
-			Eigen::MatrixX3d& points,
-			int points_size,
+			const Eigen::MatrixX3d& points,
 			int n,
 			Eigen::MatrixX3i &triplets,
-			std::vector<float> &conf_interv){
-
-		if(points_size < 3){
+			std::vector<float> &conf_interv)
+	{
+		if (points.size() < 3)
+		{
 			nls.row(n).setZero();
 			return 0;
 		}
@@ -400,25 +419,21 @@ private:
 		//creation and initialization accumulators
 		std::vector<double> votes(d1*d2);
 		std::vector<Eigen::Vector3d> votesV(d1*d2);
-		for(int i=0; i<d1; i++){
-			for(int j=0; j<d2; j++){
-				votes[i+j*d1]=0;
-				votesV[i+j*d1] = Eigen::Vector3d(0,0,0);
+		for (int i = 0; i < d1; i++)
+		{
+			for (int j = 0; j < d2; j++)
+			{
+				votes[i + j*d1] = 0;
+				votesV[i + j*d1] = Eigen::Vector3d(0, 0, 0);
 			}
 		}
 
+		float max1 = 0;
+		int i1 = 0, i2 = 0;
+		int j1 = 0, j2 = 0;
 
-		float max1 = 0, max2=0;
-		int i1=0, i2=0;
-		int j1=0, j2=0;
-		float votes_val;
-
-		//bool cont = true;
-		//int icomp = -1;
-		//int jcomp = -1;
-
-		for(int n_try=0; n_try< n_planes; n_try++){
-
+		for (int n_try = 0; n_try < n_planes; n_try++)
+		{
 			int p0 = triplets(n_try,0);
 			int p1 = triplets(n_try,1);
 			int p2 = triplets(n_try,2);
@@ -432,55 +447,61 @@ private:
 				Pn = -Pn;
 			}
 
-			float phi;
-			phi = acos((float)Pn[2]);
-			float dphi = M_PI/n_phi;
-			int posp, post;
-			posp = int(floor( (phi+dphi/2.) *n_phi/  M_PI));
+			double phi = acos(Pn[2]);
+			double dphi = M_PI / n_phi;
+			int posp = static_cast<int>(floor((phi + dphi / 2) * n_phi / M_PI));
+			int post;
 
-			if(posp == 0 || posp== n_phi){
-				post =0;
-			}else{
-				float theta = acos((float)Pn[0]/sqrt(float(Pn[0]*Pn[0]+Pn[1]*Pn[1])));
-				if(Pn[1]<0){
+			if (posp == 0 || posp == n_phi)
+			{
+				post = 0;
+			}
+			else
+			{
+				double theta = acos(Pn[0] / sqrt(Pn[0] * Pn[0] + Pn[1] * Pn[1]));
+				if (Pn[1] < 0)
+				{
 					theta *= -1;
-					theta += 2*M_PI;
+					theta += 2 * M_PI;
 				}
-				float dtheta = M_PI/(n_phi*sin(posp*dphi));
-				post = (int)(floor((theta+dtheta/2)/dtheta))%(2*n_phi);
+				double dtheta = M_PI / (n_phi*sin(posp*dphi));
+				post = static_cast<int>(floor((theta + dtheta / 2) / dtheta)) % (2 * n_phi);
 			}
 
-			post = std::max(0,std::min(2*n_phi-1,post));
-			posp = std::max(0,std::min(n_phi,posp));
+			post = std::max(0, std::min(2 * n_phi - 1, post));
+			posp = std::max(0, std::min(n_phi, posp));
 
-			votes[post+posp*d1] += 1.;
-			votesV[post+posp*d1] += Pn;
+			votes[post + posp*d1] += 1.;
+			votesV[post + posp*d1] += Pn;
 
-			max1 = votes[i1+j1*d1]/(n_try+1);
-			max2 = votes[i2+j2*d1]/(n_try+1);
-			votes_val = votes[post+posp*d1]/(n_try+1);
+			max1 = votes[i1 + j1*d1] / (n_try + 1);
+			float max2 = votes[i2 + j2*d1] / (n_try + 1);
+			float votes_val = votes[post + posp*d1] / (n_try + 1);
 
-			if(votes_val > max1){
+			if (votes_val > max1)
+			{
 				max2 = max1;
 				i2 = i1;
 				j2 = j1;
 				max1 = votes_val;
 				i1 = post;
 				j1 = posp;
-			}else if(votes_val>max2 && post!= i1 && posp!=j1){
+			}
+			else if (votes_val > max2 && post != i1 && posp != j1)
+			{
 				max2 = votes_val;
 				i2 = post;
 				j2 = posp;
 			}
 
-
-			if(max1-conf_interv[n_try] > max2){
+			if (max1 - conf_interv[n_try] > max2)
+			{
 				break;
 			}
-
 		}
-		votesV[i1+j1*d1].normalize();
-		nls.row(n) = votesV[i1+j1*d1];
+
+		votesV[i1 + j1*d1].normalize();
+		nls.row(n) = votesV[i1 + j1*d1];
 
 		return max1;
 	}
@@ -492,52 +513,59 @@ private:
 	 * @param normals_vec - table of estimated normals for the point
 	 * @param normals_conf - table of the confidence of normals
 	 */
-	inline Eigen::Vector3d normal_selection(int &rotations,
-			std::vector<Eigen::Vector3d> &normals_vec, std::vector<float> &normals_conf){
+	inline Eigen::Vector3d normal_selection(int rotations,
+			std::vector<Eigen::Vector3d> &normals_vec,
+			const std::vector<float> &normals_conf){
 
-		std::vector<bool> normals_use(rotations);
+		std::vector<bool> normals_use(rotations, true);
 		//alignement of normals
-		normals_use[0] = true;
-		for(int i=1; i<rotations; i++){
-			normals_use[i] = true;
-			if(normals_vec[0].dot(normals_vec[i])<0){
-				normals_vec[i]*= -1;
+		for (int i = 1; i < rotations; i++)
+		{
+			if (normals_vec[0].dot(normals_vec[i]) < 0)
+			{
+				normals_vec[i] *= -1;
 			}
 		}
 
 		Eigen::Vector3d normal_final;
-		std::vector<std::pair<Eigen::Vector3d, float> > normals_fin;
+		std::vector< std::pair<Eigen::Vector3d, float> > normals_fin;
 		int number_to_test = rotations;
-		while(number_to_test>0){
+		while (number_to_test > 0)
+		{
 			//getting the max
-			float max_conf=0;
+			float max_conf = 0;
 			int idx = 0;
-			for(int i=0; i<rotations; i++){
-				if(normals_use[i] && normals_conf[i]> max_conf){
+			for (int i = 0; i < rotations; i++)
+			{
+				if (normals_use[i] && normals_conf[i] > max_conf)
+				{
 					max_conf = normals_conf[i];
 					idx = i;
 				}
 			}
 
-			normals_fin.push_back(std::pair<Eigen::Vector3d, float>(normals_vec[idx]*normals_conf[idx], normals_conf[idx]));
+			normals_fin.push_back(std::pair<Eigen::Vector3d, float>(normals_vec[idx] * normals_conf[idx], normals_conf[idx]));
 			normals_use[idx] = false;
 			number_to_test--;
 
-			for(int i=0; i<rotations; i++){
-				if(normals_use[i] && acos(normals_vec[idx].dot(normals_vec[i]))< tol_angle_rad){
+			for (int i = 0; i < rotations; i++)
+			{
+				if (normals_use[i] && acos(normals_vec[idx].dot(normals_vec[i])) < tol_angle_rad)
+				{
 					normals_use[i] = false;
-					number_to_test --;
-					normals_fin.back().first += normals_vec[i]*normals_conf[i];
+					number_to_test--;
+					normals_fin.back().first += normals_vec[i] * normals_conf[i];
 					normals_fin.back().second += normals_conf[i];
 				}
 			}
-
 		}
 
 		normal_final = normals_fin[0].first;
 		float conf_fin = normals_fin[0].second;
-		for(unsigned int i=1; i<normals_fin.size(); i++){
-			if(normals_fin[i].second> conf_fin){
+		for (size_t i = 1; i < normals_fin.size(); i++)
+		{
+			if (normals_fin[i].second > conf_fin)
+			{
 				conf_fin = normals_fin[i].second;
 				normal_final = normals_fin[i].first;
 			}
@@ -545,7 +573,6 @@ private:
 
 		normal_final.normalize();
 		return normal_final;
-
 	}
 };
 
