@@ -67,6 +67,7 @@ private:
 	double tol_angle_rad;/*!< Angle parameter for cluster normal selection*/
 	size_t k_density; /*!< size of the neighborhood for density estimation*/
 
+	std::function<void(int)> progressCallback;
 
 public:
 
@@ -97,15 +98,27 @@ public:
 
 
 	// constructor
-	Eigen_Normal_Estimator(const Eigen::MatrixX3d& points, Eigen::MatrixX3d& normals):
-		pts(points),nls(normals){
-			n_planes=700;
-			n_rot=5;
-			n_phi=15;
-			tol_angle_rad=0.79;
-			neighborhood_size = 200;
-			use_density = false;
-			k_density = 5;
+	Eigen_Normal_Estimator(const Eigen::MatrixX3d& points, Eigen::MatrixX3d& normals)
+		: pts(points)
+		, nls(normals)
+	{
+		n_planes = 700;
+		n_rot = 5;
+		n_phi = 15;
+		tol_angle_rad = 0.79;
+		neighborhood_size = 200;
+		use_density = false;
+		k_density = 5;
+	}
+
+	void setProgressCallback(std::function<void(int)> callback)
+	{
+		progressCallback = callback;
+	}
+
+	int maxProgressCounter() const
+	{
+		return pts.rows() * 2;
 	}
 
 	void estimate_normals()
@@ -153,6 +166,9 @@ public:
 		int d1 = 2*n_phi;
 		int d2 = n_phi+1;
 
+		//progress
+		int progress = 0;
+
 
 		/*******************************
 		 * ESTIMATION
@@ -188,6 +204,11 @@ public:
 			}
 			d /= pointSquaredDistance.size() - 1;
 			densities[n] = d;
+
+			if (progressCallback)
+			{
+				progressCallback(++progress);
+			}
 		}
 
 
@@ -195,9 +216,10 @@ public:
 
 		//create the list of triplets in KNN case
 		Eigen::MatrixX3i trip;
-		if(!use_density)
+		if (!use_density)
+		{
 			list_of_triplets(trip, neighborhood_size, rotations*n_planes, vecInt);
-
+		}
 
 #if defined(USE_OPENMP_FOR_NORMEST)
 #pragma omp parallel for schedule(guided)
@@ -250,6 +272,10 @@ public:
 
 			nls.row(n) = normal_selection(rotations, normals_vec, normals_conf);
 
+			if (progressCallback)
+			{
+				progressCallback(++progress);
+			}
 		}
 
 	}
