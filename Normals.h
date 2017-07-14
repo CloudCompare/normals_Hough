@@ -337,7 +337,7 @@ private:
 	 * generates a list of triplets
 	 * @param triplets : table of 3-vector to fill with the indexes of the points
 	 * @param number_of_points : number of points to consider
-	 * @param triple_number : number of triplets to generate
+	 * @param triplet_number : number of triplets to generate
 	 * @param vecRandInt : table of random int
 	 */
 	inline void list_of_triplets(Eigen::MatrixX3i &triplets,
@@ -384,7 +384,7 @@ private:
 	/*!
 	 * generates a list of triplets
 	 * @param triplets : table of 3-vector to fill with the indexes of the points
-	 * @param triple_number : number of triplets to generate
+	 * @param triplet_number : number of triplets to generate
 	 * @param pointIdxSearch : index of the points used for triplets
 	 * @param vecRandInt : table of random int
 	 */
@@ -426,7 +426,6 @@ private:
 	 * @param d1 - First dimension of the accumulator
 	 * @param d2 - Second dimension of the accumulator
 	 * @param points - table of neighbors
-	 * @param points_size - size of the neighborhood
 	 * @param n - index of the point where the normal is computed
 	 * @param triplets - table of triplets
 	 * @param conf_interv - table of confidence intervals
